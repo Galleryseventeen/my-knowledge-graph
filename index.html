@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Node Graph</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #f5f4f0;
+            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #graph-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        svg {
+            background: #f5f4f0;
+            cursor: grab;
+        }
+
+        svg:active {
+            cursor: grabbing;
+        }
+
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            transform: scale(1.1);
+        }
+
+        .node circle {
+            fill: #6366f1;
+            stroke: none;
+        }
+
+        .node.central circle {
+            fill: #2d2d2d;
+        }
+
+        .node.external circle {
+            fill: #6366f1;
+        }
+
+        .node text {
+            fill: #333;
+            font-size: 11px;
+            font-weight: 400;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .node:hover text {
+            opacity: 1;
+        }
+
+        .hover-preview {
+            position: absolute;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            max-width: 300px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .hover-preview.visible {
+            opacity: 1;
+        }
+
+        .preview-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #111827;
+        }
+
+        .preview-content {
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .preview-meta {
+            font-size: 12px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 8px;
+        }
+
+        .link {
+            stroke: #d1d5db;
+            stroke-width: 1;
+            stroke-opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+
+        .link.strong {
+            stroke-width: 1.5;
+            stroke: #9ca3af;
+            stroke-opacity: 0.8;
+        }
+
+        .link:hover {
+            stroke-opacity: 1;
+            stroke: #6366f1;
+        }
+
+
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+
+        .modal-type {
+            font-size: 12px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .close-modal:hover {
+            color: #111827;
+        }
+
+
+    </style>
+</head>
+<body>
+    <div id="graph-container">
+        <div class="hover-preview" id="hoverPreview">
+            <div class="preview-title" id="previewTitle"></div>
+            <div class="preview-content" id="previewContent"></div>
+            <div class="preview-meta" id="previewMeta"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="nodeModal">
+        <div class="modal-content">
+            <button class="close-modal">&times;</button>
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle"></div>
+                <div class="modal-type" id="modalType"></div>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data structure - replace with your exported Obsidian data
+        const graphData = {
+            nodes: [
+                { id: "home", name: "Home", type: "page", content: "Welcome to the knowledge graph", connections: 5 },
+                { id: "projects", name: "Projects", type: "page", content: "Current and past projects", connections: 12 },
+                { id: "notes", name: "Daily Notes", type: "page", content: "Daily thoughts and observations", connections: 3 },
+                { id: "ideas", name: "Ideas", type: "page", content: "Random thoughts and concepts", connections: 6 },
+                { id: "resources", name: "Resources", type: "page", content: "Useful links and references", connections: 9 },
+                { id: "learning", name: "Learning", type: "page", content: "Study materials and courses", connections: 7 },
+                { id: "work", name: "Work", type: "page", content: "Professional projects and tasks", connections: 5 },
+                { id: "personal", name: "Personal", type: "page", content: "Personal life and goals", connections: 2 },
+                { id: "tools", name: "Tools", type: "page", content: "Software and hardware tools", connections: 15 },
+                { id: "archive", name: "Archive", type: "page", content: "Old notes and completed items", connections: 1 },
+                { id: "github", name: "GitHub", type: "external", url: "https://github.com", content: "", connections: 3 },
+                { id: "documentation", name: "Documentation", type: "page", content: "Technical documentation", connections: 4 },
+                { id: "research", name: "Research", type: "page", content: "Academic and personal research", connections: 11 }
+            ],
+            links: [
+                { source: "home", target: "projects", strength: 3 },
+                { source: "home", target: "notes", strength: 2 },
+                { source: "home", target: "ideas", strength: 1 },
+                { source: "projects", target: "work", strength: 4 },
+                { source: "projects", target: "tools", strength: 3 },
+                { source: "projects", target: "github", strength: 2 },
+                { source: "notes", target: "ideas", strength: 3 },
+                { source: "notes", target: "personal", strength: 2 },
+                { source: "learning", target: "resources", strength: 4 },
+                { source: "learning", target: "documentation", strength: 3 },
+                { source: "work", target: "tools", strength: 2 },
+                { source: "tools", target: "documentation", strength: 3 },
+                { source: "ideas", target: "archive", strength: 1 },
+                { source: "resources", target: "github", strength: 1 },
+                { source: "projects", target: "learning", strength: 2 },
+                { source: "research", target: "learning", strength: 3 },
+                { source: "research", target: "resources", strength: 2 },
+                { source: "tools", target: "research", strength: 1 }
+            ]
+        };
+
+        class ObsidianGraph {
+            constructor(data) {
+                this.data = data;
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.setupSVG();
+                this.setupSimulation();
+                this.setupZoom();
+                this.setupModal();
+                this.setupHoverPreview();
+                this.render();
+            }
+
+            setupSVG() {
+                this.svg = d3.select("#graph-container")
+                    .append("svg")
+                    .attr("width", this.width)
+                    .attr("height", this.height);
+
+                this.container = this.svg.append("g");
+            }
+
+            setupSimulation() {
+                this.simulation = d3.forceSimulation(this.data.nodes)
+                    .force("link", d3.forceLink(this.data.links).id(d => d.id).distance(100))
+                    .force("charge", d3.forceManyBody().strength(-150))
+                    .force("center", d3.forceCenter(this.width / 2, this.height / 2))
+                    .force("collision", d3.forceCollide().radius(d => this.getNodeRadius(d) + 10));
+            }
+
+            setupZoom() {
+                this.zoom = d3.zoom()
+                    .scaleExtent([0.1, 4])
+                    .on("zoom", (event) => {
+                        this.container.attr("transform", event.transform);
+                    });
+
+                this.svg.call(this.zoom);
+            }
+
+            setupModal() {
+                const modal = d3.select("#nodeModal");
+                d3.select(".close-modal").on("click", () => {
+                    modal.style("display", "none");
+                });
+
+                modal.on("click", (event) => {
+                    if (event.target === modal.node()) {
+                        modal.style("display", "none");
+                    }
+                });
+            }
+
+            setupHoverPreview() {
+                this.hoverPreview = d3.select("#hoverPreview");
+                this.previewTitle = d3.select("#previewTitle");
+                this.previewContent = d3.select("#previewContent");
+                this.previewMeta = d3.select("#previewMeta");
+            }
+
+            getNodeRadius(d) {
+                if (d.connections > 10) return 8;
+                return 6;
+            }
+
+            getNodeClass(d) {
+                if (d.connections > 10) return "node central";
+                if (d.type === 'external') return "node external";
+                return "node";
+            }
+
+            render() {
+                // Links
+                this.link = this.container.append("g")
+                    .selectAll("line")
+                    .data(this.data.links)
+                    .join("line")
+                    .attr("class", d => d.strength > 2 ? "link strong" : "link");
+
+                // Nodes
+                this.node = this.container.append("g")
+                    .selectAll("g")
+                    .data(this.data.nodes)
+                    .join("g")
+                    .attr("class", d => this.getNodeClass(d))
+                    .call(this.drag());
+
+                this.node.append("circle")
+                    .attr("r", d => this.getNodeRadius(d));
+
+                this.node.append("text")
+                    .text(d => d.name)
+                    .attr("dy", d => this.getNodeRadius(d) + 15)
+                    .style("opacity", 0);
+
+                // Click and hover handlers
+                this.node.on("click", (event, d) => {
+                    event.stopPropagation();
+                    if (d.type === "external" && d.url) {
+                        window.open(d.url, '_blank');
+                    } else {
+                        this.showModal(d);
+                    }
+                })
+                .on("mouseenter", (event, d) => {
+                    this.showHoverPreview(event, d);
+                })
+                .on("mouseleave", () => {
+                    this.hideHoverPreview();
+                })
+                .on("mousemove", (event) => {
+                    this.updateHoverPreviewPosition(event);
+                });
+
+                // Simulation tick
+                this.simulation.on("tick", () => {
+                    this.link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    this.node
+                        .attr("transform", d => `translate(${d.x},${d.y})`);
+                });
+            }
+
+            drag() {
+                return d3.drag()
+                    .on("start", (event, d) => {
+                        if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    })
+                    .on("drag", (event, d) => {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    })
+                    .on("end", (event, d) => {
+                        if (!event.active) this.simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    });
+            }
+
+            showModal(node) {
+                const modal = d3.select("#nodeModal");
+                d3.select("#modalTitle").text(node.name);
+                d3.select("#modalType").text(node.type);
+                
+                let content = node.content || "No content available";
+                if (node.type === "external" && node.url) {
+                    content += `<br><br><a href="${node.url}" target="_blank" style="color: #6366f1;">Open Link →</a>`;
+                }
+                
+                d3.select("#modalBody").html(content);
+                modal.style("display", "flex");
+            }
+
+            showHoverPreview(event, node) {
+                this.previewTitle.text(node.name);
+                this.previewContent.text(node.content ? 
+                    (node.content.length > 150 ? node.content.substring(0, 150) + "..." : node.content) : 
+                    "No content available"
+                );
+                this.previewMeta.text(`${node.type} • ${node.connections} connections`);
+                
+                this.hoverPreview.classed("visible", true);
+                this.updateHoverPreviewPosition(event);
+            }
+
+            hideHoverPreview() {
+                this.hoverPreview.classed("visible", false);
+            }
+
+            updateHoverPreviewPosition(event) {
+                const [mouseX, mouseY] = d3.pointer(event, document.body);
+                const previewWidth = 300;
+                const previewHeight = 120;
+                
+                let left = mouseX + 15;
+                let top = mouseY - previewHeight / 2;
+                
+                // Keep preview within viewport
+                if (left + previewWidth > window.innerWidth) {
+                    left = mouseX - previewWidth - 15;
+                }
+                if (top < 10) top = 10;
+                if (top + previewHeight > window.innerHeight) {
+                    top = window.innerHeight - previewHeight - 10;
+                }
+                
+                this.hoverPreview
+                    .style("left", left + "px")
+                    .style("top", top + "px");
+            }
+
+            resize() {
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.svg.attr("width", this.width).attr("height", this.height);
+                this.simulation.force("center", d3.forceCenter(this.width / 2, this.height / 2));
+                this.simulation.alpha(0.3).restart();
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            // Will be handled by individual graph instances
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                d3.select("#nodeModal").style("display", "none");
+            }
+        });
+    </script>
+</body>
+</html>
