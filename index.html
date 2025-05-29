@@ -128,8 +128,6 @@
             stroke: #6366f1;
         }
 
-
-
         .modal {
             position: fixed;
             top: 0;
@@ -189,8 +187,6 @@
         .close-modal:hover {
             color: #111827;
         }
-
-
     </style>
 </head>
 <body>
@@ -214,44 +210,203 @@
     </div>
 
     <script>
-        // Sample data structure - replace with your exported Obsidian data
-        const graphData = {
-            nodes: [
-                { id: "home", name: "Home", type: "page", content: "Welcome to the knowledge graph", connections: 5 },
-                { id: "projects", name: "Projects", type: "page", content: "Current and past projects", connections: 12 },
-                { id: "notes", name: "Daily Notes", type: "page", content: "Daily thoughts and observations", connections: 3 },
-                { id: "ideas", name: "Ideas", type: "page", content: "Random thoughts and concepts", connections: 6 },
-                { id: "resources", name: "Resources", type: "page", content: "Useful links and references", connections: 9 },
-                { id: "learning", name: "Learning", type: "page", content: "Study materials and courses", connections: 7 },
-                { id: "work", name: "Work", type: "page", content: "Professional projects and tasks", connections: 5 },
-                { id: "personal", name: "Personal", type: "page", content: "Personal life and goals", connections: 2 },
-                { id: "tools", name: "Tools", type: "page", content: "Software and hardware tools", connections: 15 },
-                { id: "archive", name: "Archive", type: "page", content: "Old notes and completed items", connections: 1 },
-                { id: "github", name: "GitHub", type: "external", url: "https://github.com", content: "", connections: 3 },
-                { id: "documentation", name: "Documentation", type: "page", content: "Technical documentation", connections: 4 },
-                { id: "research", name: "Research", type: "page", content: "Academic and personal research", connections: 11 }
-            ],
-            links: [
-                { source: "home", target: "projects", strength: 3 },
-                { source: "home", target: "notes", strength: 2 },
-                { source: "home", target: "ideas", strength: 1 },
-                { source: "projects", target: "work", strength: 4 },
-                { source: "projects", target: "tools", strength: 3 },
-                { source: "projects", target: "github", strength: 2 },
-                { source: "notes", target: "ideas", strength: 3 },
-                { source: "notes", target: "personal", strength: 2 },
-                { source: "learning", target: "resources", strength: 4 },
-                { source: "learning", target: "documentation", strength: 3 },
-                { source: "work", target: "tools", strength: 2 },
-                { source: "tools", target: "documentation", strength: 3 },
-                { source: "ideas", target: "archive", strength: 1 },
-                { source: "resources", target: "github", strength: 1 },
-                { source: "projects", target: "learning", strength: 2 },
-                { source: "research", target: "learning", strength: 3 },
-                { source: "research", target: "resources", strength: 2 },
-                { source: "tools", target: "research", strength: 1 }
-            ]
-        };
+        // Obsidian Vault Parser
+        class ObsidianParser {
+            constructor() {
+                this.nodes = new Map();
+                this.links = [];
+                this.linkStrengths = new Map();
+            }
+
+            async parseVaultFiles(files) {
+                // First pass: create all nodes
+                for (let file of files) {
+                    const fileName = file.name.replace('.md', '');
+                    const content = await this.readFileContent(file);
+                    
+                    this.nodes.set(fileName, {
+                        id: fileName.toLowerCase().replace(/\s+/g, '-'),
+                        name: fileName,
+                        type: 'page',
+                        content: this.extractPreview(content),
+                        rawContent: content,
+                        connections: 0
+                    });
+                }
+
+                // Second pass: extract links and create connections
+                for (let [fileName, node] of this.nodes) {
+                    const internalLinks = this.extractInternalLinks(node.rawContent);
+                    const externalLinks = this.extractExternalLinks(node.rawContent);
+
+                    // Process internal links
+                    internalLinks.forEach(linkName => {
+                        const targetNode = this.nodes.get(linkName);
+                        if (targetNode) {
+                            this.addLink(node.id, targetNode.id);
+                        }
+                    });
+
+                    // Process external links
+                    externalLinks.forEach(link => {
+                        const externalId = this.createExternalNode(link.text || link.url, link.url);
+                        this.addLink(node.id, externalId);
+                    });
+                }
+
+                // Update connection counts
+                this.updateConnectionCounts();
+
+                return this.getGraphData();
+            }
+
+            async readFileContent(file) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.readAsText(file);
+                });
+            }
+
+            extractInternalLinks(content) {
+                const linkRegex = /\[\[([^\]]+)\]\]/g;
+                const links = [];
+                let match;
+                
+                while ((match = linkRegex.exec(content)) !== null) {
+                    links.push(match[1].trim());
+                }
+                
+                return links;
+            }
+
+            extractExternalLinks(content) {
+                const links = [];
+                
+                // Markdown links [text](url)
+                const markdownRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
+                let match;
+                while ((match = markdownRegex.exec(content)) !== null) {
+                    links.push({ text: match[1], url: match[2] });
+                }
+                
+                // Direct URLs
+                const urlRegex = /https?:\/\/[^\s\)]+/g;
+                while ((match = urlRegex.exec(content)) !== null) {
+                    // Skip if already captured as markdown link
+                    if (!content.substring(Math.max(0, match.index - 10), match.index).includes('](')) {
+                        links.push({ url: match[0] });
+                    }
+                }
+                
+                return links;
+            }
+
+            extractPreview(content) {
+                // Remove markdown syntax and get first 200 chars
+                let preview = content
+                    .replace(/\[\[([^\]]+)\]\]/g, '$1') // Remove [[ ]]
+                    .replace(/\[([^\]]*)\]\([^)]+\)/g, '$1') // Remove markdown links
+                    .replace(/#+\s*/g, '') // Remove headers
+                    .replace(/\n+/g, ' ') // Replace newlines with spaces
+                    .trim();
+                
+                return preview.length > 200 ? preview.substring(0, 200) + '...' : preview;
+            }
+
+            createExternalNode(name, url) {
+                const id = 'ext-' + url.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+                
+                if (!this.nodes.has(id)) {
+                    const domain = new URL(url).hostname.replace('www.', '');
+                    this.nodes.set(id, {
+                        id: id,
+                        name: name || domain,
+                        type: 'external',
+                        url: url,
+                        content: `External link to ${domain}`,
+                        connections: 0
+                    });
+                }
+                
+                return id;
+            }
+
+            addLink(sourceId, targetId) {
+                const linkKey = `${sourceId}-${targetId}`;
+                const reverseKey = `${targetId}-${sourceId}`;
+                
+                if (this.linkStrengths.has(linkKey)) {
+                    this.linkStrengths.set(linkKey, this.linkStrengths.get(linkKey) + 1);
+                } else if (this.linkStrengths.has(reverseKey)) {
+                    this.linkStrengths.set(reverseKey, this.linkStrengths.get(reverseKey) + 1);
+                } else {
+                    this.linkStrengths.set(linkKey, 1);
+                    this.links.push({ source: sourceId, target: targetId });
+                }
+            }
+
+            updateConnectionCounts() {
+                // Count connections for each node
+                this.links.forEach(link => {
+                    const sourceNode = Array.from(this.nodes.values()).find(n => n.id === link.source);
+                    const targetNode = Array.from(this.nodes.values()).find(n => n.id === link.target);
+                    
+                    if (sourceNode) sourceNode.connections++;
+                    if (targetNode) targetNode.connections++;
+                });
+            }
+
+            getGraphData() {
+                return {
+                    nodes: Array.from(this.nodes.values()),
+                    links: this.links.map(link => ({
+                        ...link,
+                        strength: this.linkStrengths.get(`${link.source}-${link.target}`) || 
+                                 this.linkStrengths.get(`${link.target}-${link.source}`) || 1
+                    }))
+                };
+            }
+        }
+
+        // File upload handler
+        function setupFileUpload() {
+            const container = document.getElementById('graph-container');
+            
+            // Create file upload area
+            const uploadArea = document.createElement('div');
+            uploadArea.innerHTML = `
+                <div style="position: absolute; top: 20px; left: 20px; z-index: 100; background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; border: 2px dashed #d1d5db;">
+                    <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px;">
+                    <div style="font-size: 14px; color: #666;">
+                        Upload your Obsidian .md files to generate the graph
+                    </div>
+                    <button id="parseButton" style="margin-top: 10px; padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Generate Graph
+                    </button>
+                </div>
+            `;
+            container.appendChild(uploadArea);
+
+            document.getElementById('parseButton').addEventListener('click', async () => {
+                const fileInput = document.getElementById('vaultFiles');
+                const files = Array.from(fileInput.files);
+                
+                if (files.length === 0) {
+                    alert('Please select some .md files first!');
+                    return;
+                }
+
+                const parser = new ObsidianParser();
+                const graphData = await parser.parseVaultFiles(files);
+                
+                // Hide upload area
+                uploadArea.style.display = 'none';
+                
+                // Create new graph with parsed data
+                new ObsidianGraph(graphData);
+            });
+        }
 
         class ObsidianGraph {
             constructor(data) {
@@ -458,6 +613,11 @@
                 this.simulation.alpha(0.3).restart();
             }
         }
+
+        // Initialize file upload on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            setupFileUpload();
+        });
 
         // Handle window resize
         window.addEventListener('resize', () => {
