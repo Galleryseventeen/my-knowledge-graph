@@ -348,15 +348,44 @@
             top: 20px;
             right: 20px;
             z-index: 100;
-            background: rgba(255,255,255,0.9);
-            padding: 15px;
-            border-radius: 8px;
-            border: 2px dashed #d1d5db;
-            display: none;
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #6366f1;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            display: block;
+            min-width: 300px;
+            animation: slideIn 0.3s ease-out;
         }
 
-        .admin-panel.visible {
-            display: block;
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .admin-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 99;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .admin-toggle:hover {
+            background: #5855eb;
         }
 
         .landing-page {
@@ -433,14 +462,22 @@
         </div>
         
         <div class="admin-panel" id="adminPanel">
-            <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px;">
-            <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
-                Upload your Obsidian .md files to generate the graph
+            <h3 style="margin: 0 0 15px 0; color: #6366f1;">Upload Files</h3>
+            <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px; width: 100%;">
+            <div style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                Select your .md files to update the graph
             </div>
-            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <button id="parseButton" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; width: 100%;">
                 Generate Graph
             </button>
+            <button id="hideAdmin" style="padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 12px;">
+                Hide Panel
+            </button>
         </div>
+        
+        <button class="admin-toggle" id="showAdmin" style="display: none;">
+            ⚙️ Admin
+        </button>
     </div>
 
     <div class="blog-post" id="blogPost">
@@ -633,9 +670,11 @@
             }
         }
 
-        // File upload handler with admin authentication
+        // File upload handler - simplified
         function setupFileUpload() {
             const adminPanel = document.getElementById('adminPanel');
+            const showAdminButton = document.getElementById('showAdmin');
+            const hideAdminButton = document.getElementById('hideAdmin');
             const landingPage = document.getElementById('landingPage');
             
             // Load graph data (either saved or sample)
@@ -643,29 +682,24 @@
             landingPage.classList.add('hidden');
             window.currentGraph = new ObsidianGraph(graphData);
             
-            // Check for admin access via URL parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            const isAdmin = urlParams.has('admin');
+            // Setup hide/show functionality
+            hideAdminButton.addEventListener('click', () => {
+                adminPanel.style.display = 'none';
+                showAdminButton.style.display = 'block';
+            });
             
-            if (isAdmin) {
-                adminPanel.classList.add('visible');
-                setupUploadHandlers();
-            } else {
-                // Listen for admin key combination (Ctrl+Shift+A)
-                document.addEventListener('keydown', (event) => {
-                    if (event.ctrlKey && event.shiftKey && event.key === 'A') {
-                        if (checkAdminAccess()) {
-                            adminPanel.classList.add('visible');
-                            setupUploadHandlers();
-                        }
-                    }
-                });
-            }
+            showAdminButton.addEventListener('click', () => {
+                adminPanel.style.display = 'block';
+                showAdminButton.style.display = 'none';
+            });
+            
+            // Setup upload functionality
+            setupUploadHandlers();
         }
 
         function checkAdminAccess() {
-            const password = prompt('Enter admin password:');
-            return password === 'gallery17'; // Change this password!
+            // Simplified - no password needed for now
+            return true;
         }
 
         function setupUploadHandlers() {
@@ -1060,10 +1094,10 @@ This will make your graph visible to everyone!
 
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("Page loaded, setting up graph..."); // Debug log
+            console.log("Page loaded, setting up graph...");
             setupFileUpload();
             
-            // Test modal functionality after a short delay
+            // Test modal functionality
             setTimeout(() => {
                 const modal = document.getElementById('nodeModal');
                 if (modal) {
