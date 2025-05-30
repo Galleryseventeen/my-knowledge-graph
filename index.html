@@ -332,9 +332,73 @@
         .admin-panel.visible {
             display: block;
         }
+
+        .landing-page {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f5f4f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+
+        .landing-page.hidden {
+            display: none;
+        }
+
+        .landing-content {
+            text-align: center;
+            max-width: 600px;
+            padding: 40px;
+        }
+
+        .landing-title {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 16px;
+        }
+
+        .landing-subtitle {
+            font-size: 1.25rem;
+            color: #64748b;
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+
+        .loading-animation {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <div class="landing-page" id="landingPage">
+        <div class="landing-content">
+            <h1 class="landing-title">Knowledge Graph</h1>
+            <p class="landing-subtitle">
+                An interactive visualization of connected ideas and concepts.
+                <br>The graph is currently being prepared.
+            </p>
+            <div class="loading-animation"></div>
+        </div>
+    </div>
+
     <div id="graph-container">
         <div class="hover-preview" id="hoverPreview">
             <div class="preview-title" id="previewTitle"></div>
@@ -347,8 +411,11 @@
             <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
                 Upload your Obsidian .md files to generate the graph
             </div>
-            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">
                 Generate Graph
+            </button>
+            <button id="clearButton" style="padding: 8px 16px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Clear Graph
             </button>
         </div>
     </div>
@@ -545,10 +612,18 @@
         // File upload handler with admin authentication
         function setupFileUpload() {
             const adminPanel = document.getElementById('adminPanel');
+            const landingPage = document.getElementById('landingPage');
             
-            // Only show admin panel if specifically requested
+            // First, try to load saved graph data
+            if (loadSavedGraph()) {
+                return; // Graph loaded successfully, no need for landing page
+            }
+            
+            // Check for admin access via URL parameter
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('admin')) {
+            const isAdminUrl = urlParams.has('admin');
+            
+            if (isAdminUrl) {
                 if (checkAdminAccess()) {
                     adminPanel.classList.add('visible');
                     setupUploadHandlers();
@@ -564,6 +639,15 @@
                     }
                 }
             });
+
+            // If no admin access and no graph data, show landing page
+            if (!isAdminUrl) {
+                landingPage.style.display = 'flex';
+                // Hide landing page after 3 seconds to show it's "loading"
+                setTimeout(() => {
+                    landingPage.style.display = 'none';
+                }, 3000);
+            }
         }
 
         function checkAdminAccess() {
@@ -581,72 +665,49 @@
                     return;
                 }
 
+                // Hide landing page if visible
+                document.getElementById('landingPage').classList.add('hidden');
+
                 const parser = new ObsidianParser();
                 const graphData = await parser.parseVaultFiles(files);
                 
-                // Hide admin panel and show graph
+                // Save graph data for persistence
+                localStorage.setItem('knowledgeGraphData', JSON.stringify(graphData));
+                
+                // Hide admin panel during graph display
                 document.getElementById('adminPanel').style.display = 'none';
-                showGraph(graphData);
+                
+                // Create new graph with parsed data
+                window.currentGraph = new ObsidianGraph(graphData);
+                
+                // Show success message
+                alert('Graph uploaded successfully! It will now be visible to all visitors.');
+            });
+
+            // Add clear button handler
+            document.getElementById('clearButton').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear the current graph? This will remove it for all visitors.')) {
+                    localStorage.removeItem('knowledgeGraphData');
+                    location.reload(); // Refresh to show landing page
+                }
             });
         }
 
-        function showGraph(graphData) {
-            // Clear any existing content
-            const container = d3.select("#graph-container");
-            container.selectAll("svg").remove();
-            container.select(".coming-soon").remove();
-            
-            // Create new graph
-            window.currentGraph = new ObsidianGraph(graphData);
-        }
-
-        function showComingSoon() {
-            const container = document.getElementById('graph-container');
-            const comingSoon = document.createElement('div');
-            comingSoon.className = 'coming-soon';
-            comingSoon.innerHTML = `
-                <div style="
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    text-align: center;
-                    color: #64748b;
-                    font-size: 18px;
-                ">
-                    <h1 style="font-size: 3rem; font-weight: 800; color: #0f172a; margin-bottom: 16px;">
-                        Knowledge Graph
-                    </h1>
-                    <p style="margin-bottom: 24px; max-width: 400px;">
-                        Interactive visualization of connected ideas and concepts. 
-                        The graph is being prepared and will be available soon.
-                    </p>
-                    <div style="font-size: 14px; color: #94a3b8;">
-                        Check back soon to explore the connections!
-                    </div>
-                </div>
-            `;
-            container.appendChild(comingSoon);
-        }
-
-        // Alternative: Show sample data instead of "coming soon"
-        function showSampleGraph() {
-            const sampleData = {
-                nodes: [
-                    { id: "ideas", name: "Ideas", type: "page", content: "Central hub for creative thoughts and concepts", connections: 4 },
-                    { id: "projects", name: "Projects", type: "page", content: "Current and ongoing work", connections: 3 },
-                    { id: "inspiration", name: "Inspiration", type: "page", content: "Sources of creative energy", connections: 2 },
-                    { id: "tools", name: "Tools", type: "page", content: "Software and resources", connections: 2 },
-                    { id: "learning", name: "Learning", type: "page", content: "Educational materials and courses", connections: 1 }
-                ],
-                links: [
-                    { source: "ideas", target: "projects", strength: 2 },
-                    { source: "ideas", target: "inspiration", strength: 1 },
-                    { source: "projects", target: "tools", strength: 2 },
-                    { source: "inspiration", target: "learning", strength: 1 }
-                ]
-            };
-            showGraph(sampleData);
+        // Load saved graph data on page load
+        function loadSavedGraph() {
+            const savedData = localStorage.getItem('knowledgeGraphData');
+            if (savedData) {
+                try {
+                    const graphData = JSON.parse(savedData);
+                    document.getElementById('landingPage').classList.add('hidden');
+                    window.currentGraph = new ObsidianGraph(graphData);
+                    return true;
+                } catch (e) {
+                    console.error('Error loading saved graph:', e);
+                    localStorage.removeItem('knowledgeGraphData');
+                }
+            }
+            return false;
         }
 
         class ObsidianGraph {
@@ -752,17 +813,27 @@
                     .attr("class", d => this.getNodeClass(d))
                     .call(this.drag());
 
+                // Add invisible larger circle for easier clicking
                 this.node.append("circle")
-                    .attr("r", d => this.getNodeRadius(d));
+                    .attr("r", d => Math.max(20, this.getNodeRadius(d) + 10))
+                    .style("fill", "transparent")
+                    .style("stroke", "none")
+                    .style("cursor", "pointer");
+
+                // Add visible circle
+                this.node.append("circle")
+                    .attr("r", d => this.getNodeRadius(d))
+                    .style("pointer-events", "none"); // Don't interfere with clicking
 
                 this.node.append("text")
                     .text(d => d.name)
                     .attr("dy", d => this.getNodeRadius(d) + 18)
                     .style("opacity", 0)
                     .style("font-size", d => Math.max(10, this.getNodeRadius(d)) + "px")
-                    .style("font-weight", d => d.connections > 5 ? "600" : "400");
+                    .style("font-weight", d => d.connections > 5 ? "600" : "400")
+                    .style("pointer-events", "none"); // Don't interfere with clicking
 
-                // Click and hover handlers
+                // Click and hover handlers on the node group
                 this.node.on("click", (event, d) => {
                     event.stopPropagation();
                     if (d.type === "external" && d.url) {
@@ -899,13 +970,6 @@
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
             setupFileUpload();
-            
-            // Choose one of these options:
-            // Option 1: Show "coming soon" message for public users
-            showComingSoon();
-            
-            // Option 2: Show sample graph for public users (uncomment to use instead)
-            // showSampleGraph();
         });
 
         // Handle window resize
