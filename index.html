@@ -546,55 +546,29 @@
         function setupFileUpload() {
             const adminPanel = document.getElementById('adminPanel');
             
-            // Check for admin access ONLY via URL parameter
+            // Only show admin panel if specifically requested
             const urlParams = new URLSearchParams(window.location.search);
-            const isAdmin = urlParams.has('admin');
-            
-            if (isAdmin && checkAdminAccess()) {
-                adminPanel.classList.add('visible');
-                setupUploadHandlers();
+            if (urlParams.has('admin')) {
+                if (checkAdminAccess()) {
+                    adminPanel.classList.add('visible');
+                    setupUploadHandlers();
+                }
             }
 
             // Listen for admin key combination (Ctrl+Shift+A)
             document.addEventListener('keydown', (event) => {
                 if (event.ctrlKey && event.shiftKey && event.key === 'A') {
-                    event.preventDefault();
                     if (checkAdminAccess()) {
                         adminPanel.classList.add('visible');
                         setupUploadHandlers();
                     }
                 }
             });
-
-            // Show default message if no graph exists
-            if (!window.hasGraph) {
-                showWelcomeMessage();
-            }
         }
 
         function checkAdminAccess() {
             const password = prompt('Enter admin password:');
             return password === 'gallery17'; // Change this password!
-        }
-
-        function showWelcomeMessage() {
-            const container = document.getElementById('graph-container');
-            const welcome = document.createElement('div');
-            welcome.innerHTML = `
-                <div style="
-                    position: absolute; 
-                    top: 50%; 
-                    left: 50%; 
-                    transform: translate(-50%, -50%);
-                    text-align: center;
-                    color: #64748b;
-                    font-size: 18px;
-                ">
-                    <h2 style="margin-bottom: 16px; color: #334155;">Knowledge Graph</h2>
-                    <p>The interactive knowledge graph will appear here once content is uploaded.</p>
-                </div>
-            `;
-            container.appendChild(welcome);
         }
 
         function setupUploadHandlers() {
@@ -610,17 +584,69 @@
                 const parser = new ObsidianParser();
                 const graphData = await parser.parseVaultFiles(files);
                 
-                // Hide admin panel and welcome message
+                // Hide admin panel and show graph
                 document.getElementById('adminPanel').style.display = 'none';
-                const welcomeMsg = document.querySelector('#graph-container > div:not(.hover-preview):not(.admin-panel)');
-                if (welcomeMsg) welcomeMsg.remove();
-                
-                // Set flag that graph exists
-                window.hasGraph = true;
-                
-                // Create new graph with parsed data
-                window.currentGraph = new ObsidianGraph(graphData);
+                showGraph(graphData);
             });
+        }
+
+        function showGraph(graphData) {
+            // Clear any existing content
+            const container = d3.select("#graph-container");
+            container.selectAll("svg").remove();
+            container.select(".coming-soon").remove();
+            
+            // Create new graph
+            window.currentGraph = new ObsidianGraph(graphData);
+        }
+
+        function showComingSoon() {
+            const container = document.getElementById('graph-container');
+            const comingSoon = document.createElement('div');
+            comingSoon.className = 'coming-soon';
+            comingSoon.innerHTML = `
+                <div style="
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    text-align: center;
+                    color: #64748b;
+                    font-size: 18px;
+                ">
+                    <h1 style="font-size: 3rem; font-weight: 800; color: #0f172a; margin-bottom: 16px;">
+                        Knowledge Graph
+                    </h1>
+                    <p style="margin-bottom: 24px; max-width: 400px;">
+                        Interactive visualization of connected ideas and concepts. 
+                        The graph is being prepared and will be available soon.
+                    </p>
+                    <div style="font-size: 14px; color: #94a3b8;">
+                        Check back soon to explore the connections!
+                    </div>
+                </div>
+            `;
+            container.appendChild(comingSoon);
+        }
+
+        // Alternative: Show sample data instead of "coming soon"
+        function showSampleGraph() {
+            const sampleData = {
+                nodes: [
+                    { id: "ideas", name: "Ideas", type: "page", content: "Central hub for creative thoughts and concepts", connections: 4 },
+                    { id: "projects", name: "Projects", type: "page", content: "Current and ongoing work", connections: 3 },
+                    { id: "inspiration", name: "Inspiration", type: "page", content: "Sources of creative energy", connections: 2 },
+                    { id: "tools", name: "Tools", type: "page", content: "Software and resources", connections: 2 },
+                    { id: "learning", name: "Learning", type: "page", content: "Educational materials and courses", connections: 1 }
+                ],
+                links: [
+                    { source: "ideas", target: "projects", strength: 2 },
+                    { source: "ideas", target: "inspiration", strength: 1 },
+                    { source: "projects", target: "tools", strength: 2 },
+                    { source: "inspiration", target: "learning", strength: 1 }
+                ]
+            };
+            showGraph(sampleData);
         }
 
         class ObsidianGraph {
@@ -872,9 +898,14 @@
 
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
-            // Initialize graph state
-            window.hasGraph = false;
             setupFileUpload();
+            
+            // Choose one of these options:
+            // Option 1: Show "coming soon" message for public users
+            showComingSoon();
+            
+            // Option 2: Show sample graph for public users (uncomment to use instead)
+            // showSampleGraph();
         });
 
         // Handle window resize
