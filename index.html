@@ -353,9 +353,13 @@
             border-radius: 12px;
             border: 2px solid #6366f1;
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            display: block;
+            display: none;
             min-width: 300px;
             animation: slideIn 0.3s ease-out;
+        }
+
+        .admin-panel.visible {
+            display: block;
         }
 
         @keyframes slideIn {
@@ -369,23 +373,23 @@
             }
         }
 
-        .admin-toggle {
+        .admin-trigger {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #6366f1;
-            color: white;
+            top: 10px;
+            left: 10px;
+            width: 30px;
+            height: 30px;
+            background: transparent;
             border: none;
-            padding: 12px 16px;
-            border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
             z-index: 99;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            opacity: 0;
         }
 
-        .admin-toggle:hover {
-            background: #5855eb;
+        .admin-trigger:hover {
+            opacity: 0.1;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 4px;
         }
 
         .landing-page {
@@ -461,6 +465,10 @@
             <div class="preview-meta" id="previewMeta"></div>
         </div>
         
+        <!-- Hidden admin trigger - invisible to public users -->
+        <button class="admin-trigger" id="adminTrigger" title="Admin Access"></button>
+        
+        <!-- Admin panel - hidden by default -->
         <div class="admin-panel" id="adminPanel">
             <h3 style="margin: 0 0 15px 0; color: #6366f1;">Upload Files</h3>
             <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px; width: 100%;">
@@ -471,13 +479,9 @@
                 Generate Graph
             </button>
             <button id="hideAdmin" style="padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 12px;">
-                Hide Panel
+                Close
             </button>
         </div>
-        
-        <button class="admin-toggle" id="showAdmin" style="display: none;">
-            ⚙️ Admin
-        </button>
     </div>
 
     <div class="blog-post" id="blogPost">
@@ -670,10 +674,10 @@
             }
         }
 
-        // File upload handler - simplified
+        // File upload handler - clean public/admin separation
         function setupFileUpload() {
             const adminPanel = document.getElementById('adminPanel');
-            const showAdminButton = document.getElementById('showAdmin');
+            const adminTrigger = document.getElementById('adminTrigger');
             const hideAdminButton = document.getElementById('hideAdmin');
             const landingPage = document.getElementById('landingPage');
             
@@ -682,24 +686,27 @@
             landingPage.classList.add('hidden');
             window.currentGraph = new ObsidianGraph(graphData);
             
-            // Setup hide/show functionality
+            // Check for admin access via URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const isAdmin = urlParams.has('admin');
+            
+            if (isAdmin) {
+                adminPanel.classList.add('visible');
+                setupUploadHandlers();
+            }
+            
+            // Hidden admin trigger (top-left corner)
+            adminTrigger.addEventListener('click', () => {
+                if (confirm('Access admin panel?')) {
+                    adminPanel.classList.add('visible');
+                    setupUploadHandlers();
+                }
+            });
+            
+            // Hide admin panel
             hideAdminButton.addEventListener('click', () => {
-                adminPanel.style.display = 'none';
-                showAdminButton.style.display = 'block';
+                adminPanel.classList.remove('visible');
             });
-            
-            showAdminButton.addEventListener('click', () => {
-                adminPanel.style.display = 'block';
-                showAdminButton.style.display = 'none';
-            });
-            
-            // Setup upload functionality
-            setupUploadHandlers();
-        }
-
-        function checkAdminAccess() {
-            // Simplified - no password needed for now
-            return true;
         }
 
         function setupUploadHandlers() {
@@ -864,14 +871,12 @@ This will make your graph visible to everyone!
                 d3.select(".close-modal").on("click", (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    console.log("Close button clicked"); // Debug log
                     modal.style("display", "none");
                 });
 
                 // Click outside to close
                 modal.on("click", (event) => {
                     if (event.target === modal.node()) {
-                        console.log("Clicked outside modal"); // Debug log
                         modal.style("display", "none");
                     }
                 });
@@ -879,7 +884,6 @@ This will make your graph visible to everyone!
                 // ESC key to close
                 d3.select("body").on("keydown", (event) => {
                     if (event.key === 'Escape') {
-                        console.log("ESC pressed"); // Debug log
                         modal.style("display", "none");
                     }
                 });
@@ -948,13 +952,10 @@ This will make your graph visible to everyone!
                         if (timeDiff < 200) { // Quick click, not a drag
                             event.preventDefault();
                             event.stopPropagation();
-                            console.log("Quick click detected on:", d.name);
                             
                             if (d.type === "external" && d.url) {
-                                console.log("Opening external URL:", d.url);
                                 window.open(d.url, '_blank');
                             } else {
-                                console.log("Showing modal for:", d.name);
                                 this.showModal(d);
                             }
                         }
@@ -1010,8 +1011,6 @@ This will make your graph visible to everyone!
             }
 
             showModal(node) {
-                console.log("Showing modal for:", node.name); // Debug log
-                
                 const modal = d3.select("#nodeModal");
                 
                 // Make sure modal exists
@@ -1041,8 +1040,6 @@ This will make your graph visible to everyone!
                     .style("display", "flex")
                     .style("position", "fixed")
                     .style("z-index", "1000");
-                    
-                console.log("Modal should now be visible"); // Debug log
             }
 
             showHoverPreview(event, node) {
@@ -1094,18 +1091,8 @@ This will make your graph visible to everyone!
 
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("Page loaded, setting up graph...");
+            console.log("Knowledge Graph loaded");
             setupFileUpload();
-            
-            // Test modal functionality
-            setTimeout(() => {
-                const modal = document.getElementById('nodeModal');
-                if (modal) {
-                    console.log("Modal element found successfully");
-                } else {
-                    console.error("Modal element NOT found!");
-                }
-            }, 1000);
         });
 
         // Handle window resize
@@ -1117,6 +1104,7 @@ This will make your graph visible to everyone!
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 d3.select("#nodeModal").style("display", "none");
+                document.getElementById('adminPanel').classList.remove('visible');
             }
         });
     </script>
