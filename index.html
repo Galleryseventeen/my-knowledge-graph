@@ -825,12 +825,27 @@ This will make your graph visible to everyone!
 
             setupModal() {
                 const modal = d3.select("#nodeModal");
-                d3.select(".close-modal").on("click", () => {
+                
+                // Close button handler
+                d3.select(".close-modal").on("click", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    console.log("Close button clicked"); // Debug log
                     modal.style("display", "none");
                 });
 
+                // Click outside to close
                 modal.on("click", (event) => {
                     if (event.target === modal.node()) {
+                        console.log("Clicked outside modal"); // Debug log
+                        modal.style("display", "none");
+                    }
+                });
+                
+                // ESC key to close
+                d3.select("body").on("keydown", (event) => {
+                    if (event.key === 'Escape') {
+                        console.log("ESC pressed"); // Debug log
                         modal.style("display", "none");
                     }
                 });
@@ -844,8 +859,8 @@ This will make your graph visible to everyone!
             }
 
             getNodeRadius(d) {
-                const baseRadius = 6;
-                const maxRadius = 12;
+                const baseRadius = 8;
+                const maxRadius = 16;
                 const connectionScale = d3.scaleLinear()
                     .domain([0, Math.max(10, d3.max(this.data.nodes, n => n.connections))])
                     .range([baseRadius, maxRadius]);
@@ -877,11 +892,6 @@ This will make your graph visible to everyone!
                 this.node.append("circle")
                     .attr("r", d => this.getNodeRadius(d));
 
-                // Add larger invisible click area
-                this.node.append("circle")
-                    .attr("class", "click-area")
-                    .attr("r", d => Math.max(20, this.getNodeRadius(d) + 10));
-
                 this.node.append("text")
                     .text(d => d.name)
                     .attr("dy", d => this.getNodeRadius(d) + 18)
@@ -889,15 +899,32 @@ This will make your graph visible to everyone!
                     .style("font-size", d => Math.max(10, this.getNodeRadius(d)) + "px")
                     .style("font-weight", d => d.connections > 5 ? "600" : "400");
 
-                // Click and hover handlers
-                this.node.on("click", (event, d) => {
-                    event.stopPropagation();
-                    if (d.type === "external" && d.url) {
-                        window.open(d.url, '_blank');
-                    } else {
-                        this.showModal(d);
-                    }
-                })
+                // Click and hover handlers - with better timing
+                this.node
+                    .style("cursor", "pointer")
+                    .on("mousedown", function() {
+                        // Track mouse down for drag detection
+                        d3.select(this).attr("data-mousedown", Date.now());
+                    })
+                    .on("click", (event, d) => {
+                        // Check if this was a quick click vs a drag
+                        const mousedownTime = d3.select(event.currentTarget).attr("data-mousedown");
+                        const timeDiff = Date.now() - parseInt(mousedownTime || 0);
+                        
+                        if (timeDiff < 200) { // Quick click, not a drag
+                            event.preventDefault();
+                            event.stopPropagation();
+                            console.log("Quick click detected on:", d.name);
+                            
+                            if (d.type === "external" && d.url) {
+                                console.log("Opening external URL:", d.url);
+                                window.open(d.url, '_blank');
+                            } else {
+                                console.log("Showing modal for:", d.name);
+                                this.showModal(d);
+                            }
+                        }
+                    })
                 .on("mouseenter", (event, d) => {
                     this.showHoverPreview(event, d);
                 })
@@ -922,13 +949,17 @@ This will make your graph visible to everyone!
             }
 
             drag() {
+                let dragStarted = false;
+                
                 return d3.drag()
                     .on("start", (event, d) => {
+                        dragStarted = false;
                         if (!event.active) this.simulation.alphaTarget(0.3).restart();
                         d.fx = d.x;
                         d.fy = d.y;
                     })
                     .on("drag", (event, d) => {
+                        dragStarted = true;
                         d.fx = event.x;
                         d.fy = event.y;
                     })
@@ -936,11 +967,25 @@ This will make your graph visible to everyone!
                         if (!event.active) this.simulation.alphaTarget(0);
                         d.fx = null;
                         d.fy = null;
+                        
+                        // Prevent click event if we actually dragged
+                        if (dragStarted) {
+                            event.sourceEvent.stopPropagation();
+                        }
                     });
             }
 
             showModal(node) {
+                console.log("Showing modal for:", node.name); // Debug log
+                
                 const modal = d3.select("#nodeModal");
+                
+                // Make sure modal exists
+                if (modal.empty()) {
+                    console.error("Modal element not found!");
+                    return;
+                }
+                
                 d3.select("#modalTitle").text(node.name);
                 d3.select("#modalType").text(node.type);
                 d3.select("#modalConnections").text(`${node.connections} connections`);
@@ -956,7 +1001,14 @@ This will make your graph visible to everyone!
                 const formattedContent = paragraphs || `<p style="margin-bottom: 16px;">${content}</p>`;
                 
                 d3.select("#modalBody").html(formattedContent);
-                modal.style("display", "flex");
+                
+                // Show modal with important styles
+                modal
+                    .style("display", "flex")
+                    .style("position", "fixed")
+                    .style("z-index", "1000");
+                    
+                console.log("Modal should now be visible"); // Debug log
             }
 
             showHoverPreview(event, node) {
@@ -1008,7 +1060,18 @@ This will make your graph visible to everyone!
 
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
+            console.log("Page loaded, setting up graph..."); // Debug log
             setupFileUpload();
+            
+            // Test modal functionality after a short delay
+            setTimeout(() => {
+                const modal = document.getElementById('nodeModal');
+                if (modal) {
+                    console.log("Modal element found successfully");
+                } else {
+                    console.error("Modal element NOT found!");
+                }
+            }, 1000);
         });
 
         // Handle window resize
