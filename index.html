@@ -64,6 +64,13 @@
             stroke-width: 8;
         }
 
+        /* Invisible larger click area */
+        .node .click-area {
+            fill: transparent;
+            stroke: none;
+            cursor: pointer;
+        }
+
         .node text {
             fill: #333;
             font-size: 11px;
@@ -151,32 +158,51 @@
         .modal-content {
             background: #ffffff;
             border-radius: 12px;
-            padding: 30px;
-            max-width: 600px;
+            padding: 0;
+            max-width: 700px;
             max-height: 80vh;
-            overflow-y: auto;
+            overflow: hidden;
             border: 1px solid #e5e7eb;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .modal-header {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #e5e7eb;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            padding: 30px;
+            margin-bottom: 0;
+            border-bottom: none;
         }
 
         .modal-title {
-            font-size: 24px;
-            font-weight: 600;
-            color: #111827;
+            font-size: 28px;
+            font-weight: 700;
+            color: white;
             margin-bottom: 8px;
         }
 
         .modal-type {
-            font-size: 12px;
-            color: #6b7280;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
             text-transform: uppercase;
             letter-spacing: 1px;
+        }
+
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: 400px;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #374151;
+        }
+
+        .modal-connections {
+            background: #f8fafc;
+            padding: 15px 30px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #64748b;
         }
 
         .close-modal {
@@ -411,11 +437,8 @@
             <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
                 Upload your Obsidian .md files to generate the graph
             </div>
-            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">
+            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
                 Generate Graph
-            </button>
-            <button id="clearButton" style="padding: 8px 16px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Clear Graph
             </button>
         </div>
     </div>
@@ -446,6 +469,7 @@
                 <div class="modal-type" id="modalType"></div>
             </div>
             <div class="modal-body" id="modalBody"></div>
+            <div class="modal-connections" id="modalConnections"></div>
         </div>
     </div>
 
@@ -614,39 +638,28 @@
             const adminPanel = document.getElementById('adminPanel');
             const landingPage = document.getElementById('landingPage');
             
-            // First, try to load saved graph data
-            if (loadSavedGraph()) {
-                return; // Graph loaded successfully, no need for landing page
-            }
+            // Load graph data (either saved or sample)
+            const graphData = loadGraphData();
+            landingPage.classList.add('hidden');
+            window.currentGraph = new ObsidianGraph(graphData);
             
             // Check for admin access via URL parameter
             const urlParams = new URLSearchParams(window.location.search);
-            const isAdminUrl = urlParams.has('admin');
+            const isAdmin = urlParams.has('admin');
             
-            if (isAdminUrl) {
-                if (checkAdminAccess()) {
-                    adminPanel.classList.add('visible');
-                    setupUploadHandlers();
-                }
-            }
-
-            // Listen for admin key combination (Ctrl+Shift+A)
-            document.addEventListener('keydown', (event) => {
-                if (event.ctrlKey && event.shiftKey && event.key === 'A') {
-                    if (checkAdminAccess()) {
-                        adminPanel.classList.add('visible');
-                        setupUploadHandlers();
+            if (isAdmin) {
+                adminPanel.classList.add('visible');
+                setupUploadHandlers();
+            } else {
+                // Listen for admin key combination (Ctrl+Shift+A)
+                document.addEventListener('keydown', (event) => {
+                    if (event.ctrlKey && event.shiftKey && event.key === 'A') {
+                        if (checkAdminAccess()) {
+                            adminPanel.classList.add('visible');
+                            setupUploadHandlers();
+                        }
                     }
-                }
-            });
-
-            // If no admin access and no graph data, show landing page
-            if (!isAdminUrl) {
-                landingPage.style.display = 'flex';
-                // Hide landing page after 3 seconds to show it's "loading"
-                setTimeout(() => {
-                    landingPage.style.display = 'none';
-                }, 3000);
+                });
             }
         }
 
@@ -671,43 +684,97 @@
                 const parser = new ObsidianParser();
                 const graphData = await parser.parseVaultFiles(files);
                 
-                // Save graph data for persistence
-                localStorage.setItem('knowledgeGraphData', JSON.stringify(graphData));
+                // Save graph data to the page for persistence
+                saveGraphData(graphData);
                 
                 // Hide admin panel during graph display
                 document.getElementById('adminPanel').style.display = 'none';
                 
                 // Create new graph with parsed data
                 window.currentGraph = new ObsidianGraph(graphData);
-                
-                // Show success message
-                alert('Graph uploaded successfully! It will now be visible to all visitors.');
-            });
-
-            // Add clear button handler
-            document.getElementById('clearButton').addEventListener('click', () => {
-                if (confirm('Are you sure you want to clear the current graph? This will remove it for all visitors.')) {
-                    localStorage.removeItem('knowledgeGraphData');
-                    location.reload(); // Refresh to show landing page
-                }
             });
         }
 
-        // Load saved graph data on page load
-        function loadSavedGraph() {
-            const savedData = localStorage.getItem('knowledgeGraphData');
-            if (savedData) {
+        // Save graph data by embedding it in the page
+        function saveGraphData(data) {
+            // Create a script tag with the data
+            const existingData = document.getElementById('graph-data');
+            if (existingData) {
+                existingData.remove();
+            }
+            
+            const script = document.createElement('script');
+            script.id = 'graph-data';
+            script.type = 'application/json';
+            script.textContent = JSON.stringify(data);
+            document.head.appendChild(script);
+            
+            // Also prompt user to update their HTML file
+            setTimeout(() => {
+                if (confirm('Graph created! To make it visible to all visitors, you need to update your HTML file. Click OK to see instructions.')) {
+                    showPersistenceInstructions(data);
+                }
+            }, 2000);
+        }
+
+        // Load graph data if it exists
+        function loadGraphData() {
+            const dataScript = document.getElementById('graph-data');
+            if (dataScript) {
                 try {
-                    const graphData = JSON.parse(savedData);
-                    document.getElementById('landingPage').classList.add('hidden');
-                    window.currentGraph = new ObsidianGraph(graphData);
-                    return true;
+                    return JSON.parse(dataScript.textContent);
                 } catch (e) {
-                    console.error('Error loading saved graph:', e);
-                    localStorage.removeItem('knowledgeGraphData');
+                    console.error('Error loading graph data:', e);
                 }
             }
-            return false;
+            
+            // Return sample data if no saved data exists
+            return {
+                nodes: [
+                    { id: "knowledge", name: "Knowledge Graph", type: "page", content: "Welcome to this interactive knowledge graph. This is a sample node to demonstrate the functionality.", connections: 2 },
+                    { id: "obsidian", name: "Obsidian", type: "external", url: "https://obsidian.md", content: "A powerful knowledge management app", connections: 1 },
+                    { id: "notes", name: "Digital Notes", type: "page", content: "Modern note-taking has evolved beyond simple text files to interconnected knowledge networks.", connections: 1 }
+                ],
+                links: [
+                    { source: "knowledge", target: "obsidian", strength: 1 },
+                    { source: "knowledge", target: "notes", strength: 1 }
+                ]
+            };
+        }
+
+        function showPersistenceInstructions(data) {
+            const instructions = `
+To make your graph visible to all visitors:
+
+1. Copy this data and add it to your HTML file:
+
+<script id="graph-data" type="application/json">
+${JSON.stringify(data, null, 2)}
+</script>
+
+2. Add it just before </head> in your index.html
+3. Upload the updated file to GitHub
+
+This will make your graph visible to everyone!
+            `;
+            
+            // Create a modal with instructions
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.8); display: flex; align-items: center;
+                justify-content: center; z-index: 9999;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                    <h3>Make Graph Public</h3>
+                    <pre style="background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;">${instructions}</pre>
+                    <button onclick="this.closest('div').parentElement.remove()" style="margin-top: 20px; padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">Got it!</button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
         }
 
         class ObsidianGraph {
@@ -767,12 +834,6 @@
                         modal.style("display", "none");
                     }
                 });
-
-                // Setup blog post view
-                this.blogPost = d3.select("#blogPost");
-                d3.select("#backToGraph").on("click", () => {
-                    this.blogPost.classed("visible", false);
-                });
             }
 
             setupHoverPreview() {
@@ -813,33 +874,28 @@
                     .attr("class", d => this.getNodeClass(d))
                     .call(this.drag());
 
-                // Add invisible larger circle for easier clicking
                 this.node.append("circle")
-                    .attr("r", d => Math.max(20, this.getNodeRadius(d) + 10))
-                    .style("fill", "transparent")
-                    .style("stroke", "none")
-                    .style("cursor", "pointer");
+                    .attr("r", d => this.getNodeRadius(d));
 
-                // Add visible circle
+                // Add larger invisible click area
                 this.node.append("circle")
-                    .attr("r", d => this.getNodeRadius(d))
-                    .style("pointer-events", "none"); // Don't interfere with clicking
+                    .attr("class", "click-area")
+                    .attr("r", d => Math.max(20, this.getNodeRadius(d) + 10));
 
                 this.node.append("text")
                     .text(d => d.name)
                     .attr("dy", d => this.getNodeRadius(d) + 18)
                     .style("opacity", 0)
                     .style("font-size", d => Math.max(10, this.getNodeRadius(d)) + "px")
-                    .style("font-weight", d => d.connections > 5 ? "600" : "400")
-                    .style("pointer-events", "none"); // Don't interfere with clicking
+                    .style("font-weight", d => d.connections > 5 ? "600" : "400");
 
-                // Click and hover handlers on the node group
+                // Click and hover handlers
                 this.node.on("click", (event, d) => {
                     event.stopPropagation();
                     if (d.type === "external" && d.url) {
                         window.open(d.url, '_blank');
                     } else {
-                        this.showBlogPost(d);
+                        this.showModal(d);
                     }
                 })
                 .on("mouseenter", (event, d) => {
@@ -887,37 +943,20 @@
                 const modal = d3.select("#nodeModal");
                 d3.select("#modalTitle").text(node.name);
                 d3.select("#modalType").text(node.type);
-                
-                let content = node.content || "No content available";
-                if (node.type === "external" && node.url) {
-                    content += `<br><br><a href="${node.url}" target="_blank" style="color: #6366f1;">Open Link →</a>`;
-                }
-                
-                d3.select("#modalBody").html(content);
-                modal.style("display", "flex");
-            }
-
-            showBlogPost(node) {
-                // Populate blog post content
-                d3.select("#postTitle").text(node.name);
-                d3.select("#postType").text(node.type);
-                d3.select("#postConnections").text(`${node.connections} connections`);
+                d3.select("#modalConnections").text(`${node.connections} connections`);
                 
                 let content = node.content || "This note doesn't have any content yet.";
                 
-                // Format content as proper paragraphs
-                const paragraphs = content.split('\n').filter(p => p.trim()).map(p => `<p>${p}</p>`).join('');
-                let bodyContent = paragraphs || `<p>${content}</p>`;
-                
-                // Add external link if applicable
                 if (node.type === "external" && node.url) {
-                    bodyContent += `<a href="${node.url}" target="_blank" class="external-link">Visit ${node.name} →</a>`;
+                    content += `<br><br><a href="${node.url}" target="_blank" style="color: #6366f1; text-decoration: none; font-weight: 600;">Visit ${node.name} →</a>`;
                 }
                 
-                d3.select("#postBody").html(bodyContent);
+                // Format content with proper paragraphs
+                const paragraphs = content.split('\n').filter(p => p.trim()).map(p => `<p style="margin-bottom: 16px;">${p}</p>`).join('');
+                const formattedContent = paragraphs || `<p style="margin-bottom: 16px;">${content}</p>`;
                 
-                // Show blog post
-                this.blogPost.classed("visible", true);
+                d3.select("#modalBody").html(formattedContent);
+                modal.style("display", "flex");
             }
 
             showHoverPreview(event, node) {
@@ -981,7 +1020,6 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 d3.select("#nodeModal").style("display", "none");
-                d3.select("#blogPost").classed("visible", false);
             }
         });
     </script>
