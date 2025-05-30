@@ -355,11 +355,11 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
             display: none;
             min-width: 300px;
-            animation: slideIn 0.3s ease-out;
         }
 
         .admin-panel.visible {
             display: block;
+            animation: slideIn 0.3s ease-out;
         }
 
         @keyframes slideIn {
@@ -373,23 +373,42 @@
             }
         }
 
-        .admin-trigger {
+        .admin-hint {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            width: 30px;
-            height: 30px;
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            z-index: 99;
-            opacity: 0;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 50;
+            opacity: 0.7;
+            transition: all 0.3s ease;
         }
 
-        .admin-trigger:hover {
-            opacity: 0.1;
-            background: rgba(99, 102, 241, 0.1);
-            border-radius: 4px;
+        .admin-hint:hover {
+            opacity: 1;
+            background: rgba(0,0,0,0.9);
+        }
+
+        .admin-feedback {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #6366f1;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .admin-feedback.show {
+            opacity: 1;
         }
 
         .landing-page {
@@ -465,22 +484,23 @@
             <div class="preview-meta" id="previewMeta"></div>
         </div>
         
-        <!-- Hidden admin trigger - invisible to public users -->
-        <button class="admin-trigger" id="adminTrigger" title="Admin Access"></button>
-        
-        <!-- Admin panel - hidden by default -->
         <div class="admin-panel" id="adminPanel">
-            <h3 style="margin: 0 0 15px 0; color: #6366f1;">Upload Files</h3>
+            <h3 style="margin: 0 0 15px 0; color: #6366f1;">Admin Panel</h3>
             <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px; width: 100%;">
             <div style="font-size: 14px; color: #666; margin-bottom: 15px;">
-                Select your .md files to update the graph
+                Upload your Obsidian .md files to generate the graph
             </div>
             <button id="parseButton" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; width: 100%;">
                 Generate Graph
             </button>
-            <button id="hideAdmin" style="padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 12px;">
-                Close
-            </button>
+        </div>
+        
+        <div class="admin-hint" id="adminHint">
+            Admin: Alt+A or triple-click
+        </div>
+        
+        <div class="admin-feedback" id="adminFeedback">
+            Admin shortcut detected!
         </div>
     </div>
 
@@ -674,11 +694,10 @@
             }
         }
 
-        // File upload handler - clean public/admin separation
+        // File upload handler with admin authentication
         function setupFileUpload() {
             const adminPanel = document.getElementById('adminPanel');
-            const adminTrigger = document.getElementById('adminTrigger');
-            const hideAdminButton = document.getElementById('hideAdmin');
+            const adminHint = document.getElementById('adminHint');
             const landingPage = document.getElementById('landingPage');
             
             // Load graph data (either saved or sample)
@@ -688,25 +707,38 @@
             
             // Check for admin access via URL parameter
             const urlParams = new URLSearchParams(window.location.search);
-            const isAdmin = urlParams.has('admin');
-            
-            if (isAdmin) {
-                adminPanel.classList.add('visible');
-                setupUploadHandlers();
+            if (urlParams.has('admin')) {
+                showAdminPanel();
+                return;
             }
+
+            // Show admin hint for site owner
+            const isOwnerDomain = window.location.hostname.includes('galleryseventeen');
+            if (isOwnerDomain) {
+                adminHint.style.display = 'block';
+            }
+        }
+
+        function showAdminPanel() {
+            const adminPanel = document.getElementById('adminPanel');
+            const adminHint = document.getElementById('adminHint');
             
-            // Hidden admin trigger (top-left corner)
-            adminTrigger.addEventListener('click', () => {
-                if (confirm('Access admin panel?')) {
-                    adminPanel.classList.add('visible');
-                    setupUploadHandlers();
-                }
-            });
-            
-            // Hide admin panel
-            hideAdminButton.addEventListener('click', () => {
-                adminPanel.classList.remove('visible');
-            });
+            adminPanel.classList.add('visible');
+            adminHint.style.display = 'none';
+            setupUploadHandlers();
+            console.log("Admin panel activated!");
+        }
+
+        function checkAdminAccess() {
+            const password = prompt('Enter admin password:');
+            console.log("Password check for:", password);
+            if (password === 'gallery17') {
+                showAdminPanel();
+                return true;
+            } else {
+                alert('Incorrect password');
+                return false;
+            }
         }
 
         function setupUploadHandlers() {
@@ -871,12 +903,14 @@ This will make your graph visible to everyone!
                 d3.select(".close-modal").on("click", (event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    console.log("Close button clicked"); // Debug log
                     modal.style("display", "none");
                 });
 
                 // Click outside to close
                 modal.on("click", (event) => {
                     if (event.target === modal.node()) {
+                        console.log("Clicked outside modal"); // Debug log
                         modal.style("display", "none");
                     }
                 });
@@ -884,6 +918,7 @@ This will make your graph visible to everyone!
                 // ESC key to close
                 d3.select("body").on("keydown", (event) => {
                     if (event.key === 'Escape') {
+                        console.log("ESC pressed"); // Debug log
                         modal.style("display", "none");
                     }
                 });
@@ -937,27 +972,20 @@ This will make your graph visible to everyone!
                     .style("font-size", d => Math.max(10, this.getNodeRadius(d)) + "px")
                     .style("font-weight", d => d.connections > 5 ? "600" : "400");
 
-                // Click and hover handlers - with better timing
+                // Click and hover handlers - much simpler approach
                 this.node
                     .style("cursor", "pointer")
-                    .on("mousedown", function() {
-                        // Track mouse down for drag detection
-                        d3.select(this).attr("data-mousedown", Date.now());
-                    })
                     .on("click", (event, d) => {
-                        // Check if this was a quick click vs a drag
-                        const mousedownTime = d3.select(event.currentTarget).attr("data-mousedown");
-                        const timeDiff = Date.now() - parseInt(mousedownTime || 0);
+                        // Simple click detection
+                        event.stopPropagation();
+                        console.log("Node clicked:", d.name);
                         
-                        if (timeDiff < 200) { // Quick click, not a drag
-                            event.preventDefault();
-                            event.stopPropagation();
-                            
-                            if (d.type === "external" && d.url) {
-                                window.open(d.url, '_blank');
-                            } else {
-                                this.showModal(d);
-                            }
+                        if (d.type === "external" && d.url) {
+                            console.log("Opening external URL:", d.url);
+                            window.open(d.url, '_blank');
+                        } else {
+                            console.log("Showing modal for:", d.name);
+                            this.showModal(d);
                         }
                     })
                 .on("mouseenter", (event, d) => {
@@ -1011,6 +1039,8 @@ This will make your graph visible to everyone!
             }
 
             showModal(node) {
+                console.log("Showing modal for:", node.name); // Debug log
+                
                 const modal = d3.select("#nodeModal");
                 
                 // Make sure modal exists
@@ -1040,6 +1070,8 @@ This will make your graph visible to everyone!
                     .style("display", "flex")
                     .style("position", "fixed")
                     .style("z-index", "1000");
+                    
+                console.log("Modal should now be visible"); // Debug log
             }
 
             showHoverPreview(event, node) {
@@ -1091,9 +1123,69 @@ This will make your graph visible to everyone!
 
         // Initialize file upload on page load
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("Knowledge Graph loaded");
+            console.log("Page loaded, setting up graph...");
             setupFileUpload();
+            setupAdminAccess();
+            
+            // Test modal functionality
+            setTimeout(() => {
+                const modal = document.getElementById('nodeModal');
+                if (modal) {
+                    console.log("Modal element found successfully");
+                } else {
+                    console.error("Modal element NOT found!");
+                }
+            }, 1000);
         });
+
+        // Setup admin access methods
+        function setupAdminAccess() {
+            // Method 1: Alt + A
+            document.addEventListener('keydown', (event) => {
+                if (event.altKey && event.key.toLowerCase() === 'a') {
+                    event.preventDefault();
+                    console.log("Alt+A detected!");
+                    showAdminFeedback();
+                    setTimeout(() => checkAdminAccess(), 100);
+                }
+            });
+
+            // Method 2: Triple-click anywhere
+            let clickCount = 0;
+            let clickTimer = null;
+            
+            document.addEventListener('click', (event) => {
+                // Don't count clicks on the admin panel itself
+                if (event.target.closest('#adminPanel')) {
+                    return;
+                }
+                
+                clickCount++;
+                
+                // Clear existing timer
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                }
+                
+                // Set new timer
+                clickTimer = setTimeout(() => {
+                    if (clickCount === 3) {
+                        console.log("Triple-click detected!");
+                        showAdminFeedback();
+                        setTimeout(() => checkAdminAccess(), 100);
+                    }
+                    clickCount = 0;
+                }, 500);
+            });
+        }
+
+        function showAdminFeedback() {
+            const feedback = document.getElementById('adminFeedback');
+            feedback.classList.add('show');
+            setTimeout(() => {
+                feedback.classList.remove('show');
+            }, 1500);
+        }
 
         // Handle window resize
         window.addEventListener('resize', () => {
@@ -1104,7 +1196,6 @@ This will make your graph visible to everyone!
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 d3.select("#nodeModal").style("display", "none");
-                document.getElementById('adminPanel').classList.remove('visible');
             }
         });
     </script>
