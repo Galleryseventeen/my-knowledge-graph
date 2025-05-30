@@ -411,6 +411,24 @@
             opacity: 1;
         }
 
+        .test-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 100;
+        }
+
+        .test-button:hover {
+            background: #059669;
+        }
+
         .landing-page {
             position: fixed;
             top: 0;
@@ -478,6 +496,8 @@
     </div>
 
     <div id="graph-container">
+        <button class="test-button" onclick="testModal()">Test Modal</button>
+        
         <div class="hover-preview" id="hoverPreview">
             <div class="preview-title" id="previewTitle"></div>
             <div class="preview-content" id="previewContent"></div>
@@ -1012,17 +1032,13 @@ This will make your graph visible to everyone!
             }
 
             drag() {
-                let dragStarted = false;
-                
                 return d3.drag()
                     .on("start", (event, d) => {
-                        dragStarted = false;
                         if (!event.active) this.simulation.alphaTarget(0.3).restart();
                         d.fx = d.x;
                         d.fy = d.y;
                     })
                     .on("drag", (event, d) => {
-                        dragStarted = true;
                         d.fx = event.x;
                         d.fy = event.y;
                     })
@@ -1030,28 +1046,38 @@ This will make your graph visible to everyone!
                         if (!event.active) this.simulation.alphaTarget(0);
                         d.fx = null;
                         d.fy = null;
-                        
-                        // Prevent click event if we actually dragged
-                        if (dragStarted) {
-                            event.sourceEvent.stopPropagation();
-                        }
                     });
             }
 
             showModal(node) {
-                console.log("Showing modal for:", node.name); // Debug log
+                console.log("=== SHOWING MODAL ===");
+                console.log("Node data:", node);
                 
                 const modal = d3.select("#nodeModal");
                 
-                // Make sure modal exists
+                // Check if modal exists
                 if (modal.empty()) {
-                    console.error("Modal element not found!");
+                    console.error("❌ Modal element #nodeModal not found!");
+                    alert(`Clicked on: ${node.name}\nContent: ${node.content || 'No content'}`);
                     return;
                 }
                 
-                d3.select("#modalTitle").text(node.name);
-                d3.select("#modalType").text(node.type);
-                d3.select("#modalConnections").text(`${node.connections} connections`);
+                console.log("✅ Modal element found");
+                
+                // Populate modal content
+                const title = d3.select("#modalTitle");
+                const type = d3.select("#modalType");
+                const connections = d3.select("#modalConnections");
+                const body = d3.select("#modalBody");
+                
+                if (title.empty()) console.error("❌ #modalTitle not found");
+                if (type.empty()) console.error("❌ #modalType not found");
+                if (connections.empty()) console.error("❌ #modalConnections not found");
+                if (body.empty()) console.error("❌ #modalBody not found");
+                
+                title.text(node.name);
+                type.text(node.type);
+                connections.text(`${node.connections} connections`);
                 
                 let content = node.content || "This note doesn't have any content yet.";
                 
@@ -1063,15 +1089,30 @@ This will make your graph visible to everyone!
                 const paragraphs = content.split('\n').filter(p => p.trim()).map(p => `<p style="margin-bottom: 16px;">${p}</p>`).join('');
                 const formattedContent = paragraphs || `<p style="margin-bottom: 16px;">${content}</p>`;
                 
-                d3.select("#modalBody").html(formattedContent);
+                body.html(formattedContent);
                 
-                // Show modal with important styles
+                // Show modal with explicit styles
                 modal
                     .style("display", "flex")
                     .style("position", "fixed")
-                    .style("z-index", "1000");
+                    .style("top", "0")
+                    .style("left", "0")
+                    .style("width", "100%")
+                    .style("height", "100%")
+                    .style("background", "rgba(0, 0, 0, 0.8)")
+                    .style("z-index", "9999")
+                    .style("justify-content", "center")
+                    .style("align-items", "center");
                     
-                console.log("Modal should now be visible"); // Debug log
+                console.log("✅ Modal should now be visible");
+                
+                // Focus the modal for accessibility
+                setTimeout(() => {
+                    const modalElement = document.getElementById('nodeModal');
+                    if (modalElement) {
+                        modalElement.focus();
+                    }
+                }, 100);
             }
 
             showHoverPreview(event, node) {
@@ -1185,6 +1226,24 @@ This will make your graph visible to everyone!
             setTimeout(() => {
                 feedback.classList.remove('show');
             }, 1500);
+        }
+
+        // Test function to verify modal works
+        function testModal() {
+            console.log("=== TESTING MODAL ===");
+            const testNode = {
+                name: "Test Node",
+                type: "page",
+                content: "This is a test to verify the modal is working correctly. If you can see this, the modal system is functioning!",
+                connections: 1
+            };
+            
+            if (window.currentGraph) {
+                window.currentGraph.showModal(testNode);
+            } else {
+                console.error("No graph instance found");
+                alert("Test Node Clicked!\nContent: " + testNode.content);
+            }
         }
 
         // Handle window resize
