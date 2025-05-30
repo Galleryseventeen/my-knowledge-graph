@@ -41,12 +41,13 @@
         }
 
         .node:hover {
-            transform: scale(1.1);
+            transform: scale(1.2);
         }
 
         .node circle {
             fill: #6366f1;
             stroke: none;
+            transition: all 0.3s ease;
         }
 
         .node.central circle {
@@ -54,7 +55,13 @@
         }
 
         .node.external circle {
-            fill: #6366f1;
+            fill: #10b981;
+        }
+
+        .node:hover circle {
+            filter: brightness(1.1);
+            stroke: rgba(99, 102, 241, 0.3);
+            stroke-width: 8;
         }
 
         .node text {
@@ -187,6 +194,144 @@
         .close-modal:hover {
             color: #111827;
         }
+
+        .blog-post {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            z-index: 2000;
+            display: none;
+            overflow-y: auto;
+        }
+
+        .blog-post.visible {
+            display: block;
+        }
+
+        .blog-header {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .blog-nav {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .back-button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .back-button:hover {
+            background: #5855eb;
+        }
+
+        .blog-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        .blog-content {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .post-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .post-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .post-type {
+            background: #6366f1;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .post-connections {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .post-body {
+            font-size: 18px;
+            line-height: 1.7;
+            color: #334155;
+        }
+
+        .post-body p {
+            margin-bottom: 24px;
+        }
+
+        .external-link {
+            display: inline-block;
+            margin-top: 24px;
+            padding: 12px 24px;
+            background: #10b981;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .external-link:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+
+        .admin-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px dashed #d1d5db;
+            display: none;
+        }
+
+        .admin-panel.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -195,6 +340,34 @@
             <div class="preview-title" id="previewTitle"></div>
             <div class="preview-content" id="previewContent"></div>
             <div class="preview-meta" id="previewMeta"></div>
+        </div>
+        
+        <div class="admin-panel" id="adminPanel">
+            <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px;">
+            <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
+                Upload your Obsidian .md files to generate the graph
+            </div>
+            <button id="parseButton" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Generate Graph
+            </button>
+        </div>
+    </div>
+
+    <div class="blog-post" id="blogPost">
+        <div class="blog-header">
+            <div class="blog-nav">
+                <button class="back-button" id="backToGraph">← Back to Graph</button>
+                <h1 class="blog-title">Knowledge Graph</h1>
+                <div></div>
+            </div>
+        </div>
+        <div class="blog-content">
+            <h1 class="post-title" id="postTitle"></h1>
+            <div class="post-meta">
+                <span class="post-type" id="postType"></span>
+                <span class="post-connections" id="postConnections"></span>
+            </div>
+            <div class="post-body" id="postBody"></div>
         </div>
     </div>
 
@@ -369,25 +542,36 @@
             }
         }
 
-        // File upload handler
+        // File upload handler with admin authentication
         function setupFileUpload() {
-            const container = document.getElementById('graph-container');
+            const adminPanel = document.getElementById('adminPanel');
             
-            // Create file upload area
-            const uploadArea = document.createElement('div');
-            uploadArea.innerHTML = `
-                <div style="position: absolute; top: 20px; left: 20px; z-index: 100; background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; border: 2px dashed #d1d5db;">
-                    <input type="file" id="vaultFiles" multiple accept=".md" style="margin-bottom: 10px;">
-                    <div style="font-size: 14px; color: #666;">
-                        Upload your Obsidian .md files to generate the graph
-                    </div>
-                    <button id="parseButton" style="margin-top: 10px; padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Generate Graph
-                    </button>
-                </div>
-            `;
-            container.appendChild(uploadArea);
+            // Check for admin access via URL parameter or prompt
+            const urlParams = new URLSearchParams(window.location.search);
+            const isAdmin = urlParams.has('admin') || checkAdminAccess();
+            
+            if (isAdmin) {
+                adminPanel.classList.add('visible');
+                setupUploadHandlers();
+            }
 
+            // Listen for admin key combination (Ctrl+Shift+A)
+            document.addEventListener('keydown', (event) => {
+                if (event.ctrlKey && event.shiftKey && event.key === 'A') {
+                    if (checkAdminAccess()) {
+                        adminPanel.classList.add('visible');
+                        setupUploadHandlers();
+                    }
+                }
+            });
+        }
+
+        function checkAdminAccess() {
+            const password = prompt('Enter admin password:');
+            return password === 'gallery17'; // Change this password!
+        }
+
+        function setupUploadHandlers() {
             document.getElementById('parseButton').addEventListener('click', async () => {
                 const fileInput = document.getElementById('vaultFiles');
                 const files = Array.from(fileInput.files);
@@ -400,11 +584,11 @@
                 const parser = new ObsidianParser();
                 const graphData = await parser.parseVaultFiles(files);
                 
-                // Hide upload area
-                uploadArea.style.display = 'none';
+                // Hide admin panel during graph display
+                document.getElementById('adminPanel').style.display = 'none';
                 
                 // Create new graph with parsed data
-                new ObsidianGraph(graphData);
+                window.currentGraph = new ObsidianGraph(graphData);
             });
         }
 
@@ -432,10 +616,16 @@
 
             setupSimulation() {
                 this.simulation = d3.forceSimulation(this.data.nodes)
-                    .force("link", d3.forceLink(this.data.links).id(d => d.id).distance(100))
-                    .force("charge", d3.forceManyBody().strength(-150))
+                    .force("link", d3.forceLink(this.data.links).id(d => d.id).distance(d => {
+                        // Vary link distance based on connection strength
+                        return 80 + (d.strength * 20);
+                    }))
+                    .force("charge", d3.forceManyBody().strength(d => {
+                        // More connected nodes repel more strongly
+                        return -100 - (d.connections * 10);
+                    }))
                     .force("center", d3.forceCenter(this.width / 2, this.height / 2))
-                    .force("collision", d3.forceCollide().radius(d => this.getNodeRadius(d) + 10));
+                    .force("collision", d3.forceCollide().radius(d => this.getNodeRadius(d) + 15));
             }
 
             setupZoom() {
@@ -459,6 +649,12 @@
                         modal.style("display", "none");
                     }
                 });
+
+                // Setup blog post view
+                this.blogPost = d3.select("#blogPost");
+                d3.select("#backToGraph").on("click", () => {
+                    this.blogPost.classed("visible", false);
+                });
             }
 
             setupHoverPreview() {
@@ -469,12 +665,16 @@
             }
 
             getNodeRadius(d) {
-                if (d.connections > 10) return 8;
-                return 6;
+                const baseRadius = 6;
+                const maxRadius = 12;
+                const connectionScale = d3.scaleLinear()
+                    .domain([0, Math.max(10, d3.max(this.data.nodes, n => n.connections))])
+                    .range([baseRadius, maxRadius]);
+                return connectionScale(d.connections);
             }
 
             getNodeClass(d) {
-                if (d.connections > 10) return "node central";
+                if (d.connections > 8) return "node central";
                 if (d.type === 'external') return "node external";
                 return "node";
             }
@@ -500,8 +700,10 @@
 
                 this.node.append("text")
                     .text(d => d.name)
-                    .attr("dy", d => this.getNodeRadius(d) + 15)
-                    .style("opacity", 0);
+                    .attr("dy", d => this.getNodeRadius(d) + 18)
+                    .style("opacity", 0)
+                    .style("font-size", d => Math.max(10, this.getNodeRadius(d)) + "px")
+                    .style("font-weight", d => d.connections > 5 ? "600" : "400");
 
                 // Click and hover handlers
                 this.node.on("click", (event, d) => {
@@ -509,7 +711,7 @@
                     if (d.type === "external" && d.url) {
                         window.open(d.url, '_blank');
                     } else {
-                        this.showModal(d);
+                        this.showBlogPost(d);
                     }
                 })
                 .on("mouseenter", (event, d) => {
@@ -565,6 +767,29 @@
                 
                 d3.select("#modalBody").html(content);
                 modal.style("display", "flex");
+            }
+
+            showBlogPost(node) {
+                // Populate blog post content
+                d3.select("#postTitle").text(node.name);
+                d3.select("#postType").text(node.type);
+                d3.select("#postConnections").text(`${node.connections} connections`);
+                
+                let content = node.content || "This note doesn't have any content yet.";
+                
+                // Format content as proper paragraphs
+                const paragraphs = content.split('\n').filter(p => p.trim()).map(p => `<p>${p}</p>`).join('');
+                let bodyContent = paragraphs || `<p>${content}</p>`;
+                
+                // Add external link if applicable
+                if (node.type === "external" && node.url) {
+                    bodyContent += `<a href="${node.url}" target="_blank" class="external-link">Visit ${node.name} →</a>`;
+                }
+                
+                d3.select("#postBody").html(bodyContent);
+                
+                // Show blog post
+                this.blogPost.classed("visible", true);
             }
 
             showHoverPreview(event, node) {
@@ -628,6 +853,7 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 d3.select("#nodeModal").style("display", "none");
+                d3.select("#blogPost").classed("visible", false);
             }
         });
     </script>
